@@ -137,6 +137,14 @@ VALID_HOOKS: set[str] = {
     "on_session_finalize", "on_session_reset", "on_session_delete",
     # on_session_open: local session created/opened, before its first turn. Kwargs: session_id, platform, reason.
     "on_session_open",
+    # on_status_bar_render: plugin-contributed CLI status-bar fragments. Fired on a dedicated
+    # background refresh thread, never on the prompt_toolkit repaint path, so a slow callback
+    # (a shell hook, an HTTP quota probe) cannot stall a frame or freeze input. Kwargs:
+    # snapshot (a copy of the status-bar snapshot: model_short, duration, context_percent,
+    # context_tokens, session_total_tokens, ...) and telemetry_schema_version. Return a str
+    # (or any scalar) to contribute a fragment, falsy/None to contribute nothing; each
+    # plugin's value renders as its own segment in every width tier. Observers; fail-open.
+    "on_status_bar_render",
     # on_skill_lifecycle: successful skill lifecycle facts (local skill name visible to plugins).
     "on_skill_lifecycle", "subagent_start", "subagent_stop",
     # pre_gateway_dispatch: once per incoming MessageEvent, after the internal-event guard, BEFORE
