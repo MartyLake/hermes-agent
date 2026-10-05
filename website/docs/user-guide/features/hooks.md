@@ -479,7 +479,7 @@ Payload fields below are the exact event-specific fields supplied by each call s
 | `on_session_delete` | Observer | After a session delete or deliberate archive commits (CLI, TUI, Desktop/dashboard, gateway API, sweeps, prune); return ignored. | `session_id`, `reason`, `profile`, optional `deleted_ids` (full set when more than one row went), `sessions_dir` | Session identifiers only; no message content. |
 | `post_compaction` | Observer | Once per committed compaction, on every path: automatic and manual compaction in the agent loop (CLI, TUI, Desktop, gateway hygiene, overflow recovery), the gateway's `/compress` (`session.mutate compress`), Codex app-server compactions, micro-compaction and proactive tool-result pruning. Not fired for attempts that changed nothing (aborted, blocked, refused). Timeout-bounded; return ignored. | `session_id`, `old_session_id`, `kind`, `reason`, `before_tokens`, `after_tokens`, `messages_removed` | Identifiers and counts only. |
 | `post_curator_run` | Observer | After a curator pass wrote its per-run report (`logs/curator/<run>/run.json` + `REPORT.md`), in the process that ran the pass. Return ignored. | `run_dir`, `run_json_path`, `report_md_path`, `dry_run` | Local filesystem paths; the report names skills. |
-| `on_status_bar_render` | Observer | On a dedicated background refresh thread while the interactive CLI is up, never on the prompt_toolkit repaint path; each callback's return value is rendered as one status-bar fragment (falsy returns contribute nothing). | `snapshot` | `snapshot` is a copy of the CLI status-bar state — model/provider routing, context token counts, session totals. No message body. |
+| `on_status_bar_render` | Observer | On a dedicated background refresh thread while the interactive CLI is up, never on the prompt_toolkit repaint path; each callback's return value is rendered as one status-bar fragment (falsy returns contribute nothing). Python plugins only. | `snapshot` | `snapshot` is a copy of the CLI status-bar state — model/provider routing, context token counts, session totals. No message body. |
 | `agent_loop_stopped` | Observer | Immediately after a real running agent is interrupted — gateway `_interrupt_and_clear_session` or TUI/desktop `session.interrupt`; return ignored. | `session_key`, `platform`, `reason`, `invalidation_reason` | Session/routing identifiers and interruption reasons; no message body. |
 | `on_skill_lifecycle` | Observer | After an authoritative skill-usage state change; return ignored. | `action`, `skill_name`, `provenance`, `task_id`, `session_id`, `use_count`, `reused`, `reuse_after_patch` | Exposes the local skill name and provenance. |
 | `subagent_start` | Observer | Child constructed and about to run; return ignored. | `parent_session_id`, `parent_turn_id`, `parent_subagent_id`, `child_session_id`, `child_subagent_id`, `child_role`, `child_goal` | Child goal may contain user/project content. |
@@ -1233,6 +1233,8 @@ def my_callback(run_dir: str, run_json_path: str, report_md_path: str, dry_run: 
 
 Lets a plugin contribute extra fragments to the **interactive CLI status bar** (the footer line under the input box). Fragments are appended after the built-in fields in every width tier and reach both status-bar renderers, so one implementation covers the narrow, medium, and wide layouts.
 
+**Python plugins only.** A fragment is a scalar return value, and the shell-hook response protocol has no channel for one, so a `hooks:` config entry for `on_status_bar_render` is refused loudly at startup instead of having its output silently ignored.
+
 **Callback signature:**
 
 ```python
@@ -1243,7 +1245,7 @@ def my_callback(snapshot: dict, **kwargs):
 |-----------|------|-------------|
 | `snapshot` | `dict` | A copy of the status-bar snapshot: `model_name`, `model_short`, `duration`, `context_tokens`, `context_length`, `context_percent`, `session_total_tokens`, `session_api_calls`. Mutating it does not affect the renderer. |
 
-**Fires:** on a dedicated background refresh thread while the interactive CLI runs — **never** on the prompt_toolkit repaint path, so a callback that shells out (a configured shell hook) or probes an HTTP endpoint cannot stall a frame or freeze input. The refresh thread asks the callbacks at most once per second, with a bounded 3s wait per round; a timeout or an error leaves the previous contribution in place rather than blanking the footer. The loop starts with the TUI and stops at teardown, so it does not run on the one-shot `hermes -q` path (which has no status bar).
+**Fires:** on a dedicated background refresh thread while the interactive CLI runs — **never** on the prompt_toolkit repaint path, so a callback that shells out or probes an HTTP endpoint cannot stall a frame or freeze input. The refresh thread asks the callbacks at most once per second, with a bounded 3s wait per round; a timeout or an error leaves the previous contribution in place rather than blanking the footer. The loop starts with the TUI and stops at teardown, so it does not run on the one-shot `hermes -q` path (which has no status bar).
 
 **Return value:** A string (or any scalar) becomes one status-bar fragment; `None` and other falsy values contribute nothing. Control characters are collapsed to spaces, so a contribution can never break the footer onto a second line.
 
